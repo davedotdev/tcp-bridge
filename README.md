@@ -57,13 +57,25 @@ Edit both files with your NATS credentials and settings.
 ### 3. Build
 
 ```bash
-# Build both binaries
+# Build for current platform
 go build -o bin/bridge-server ./cmd/bridge-server
 go build -o bin/bridge-client ./cmd/bridge-client
 
-# Cross-compile for Linux
+# Linux (amd64)
 GOOS=linux GOARCH=amd64 go build -o bin/bridge-server-linux-amd64 ./cmd/bridge-server
-GOOS=linux GOARCH=arm64 go build -o bin/bridge-client-linux-arm64 ./cmd/bridge-client
+GOOS=linux GOARCH=amd64 go build -o bin/bridge-client-linux-amd64 ./cmd/bridge-client
+
+# macOS (Intel)
+GOOS=darwin GOARCH=amd64 go build -o bin/bridge-server-darwin-amd64 ./cmd/bridge-server
+GOOS=darwin GOARCH=amd64 go build -o bin/bridge-client-darwin-amd64 ./cmd/bridge-client
+
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o bin/bridge-server-darwin-arm64 ./cmd/bridge-server
+GOOS=darwin GOARCH=arm64 go build -o bin/bridge-client-darwin-arm64 ./cmd/bridge-client
+
+# Windows (amd64)
+GOOS=windows GOARCH=amd64 go build -o bin/bridge-server-windows-amd64.exe ./cmd/bridge-server
+GOOS=windows GOARCH=amd64 go build -o bin/bridge-client-windows-amd64.exe ./cmd/bridge-client
 ```
 
 ### 4. Run

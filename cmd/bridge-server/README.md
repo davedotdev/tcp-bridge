@@ -34,11 +34,20 @@ Required variables:
 ## Build
 
 ```bash
-# From project root
+# From project root - current platform
 go build -o bin/bridge-server ./cmd/bridge-server
 
-# Cross-compile for Linux AMD64
+# Linux (amd64)
 GOOS=linux GOARCH=amd64 go build -o bin/bridge-server-linux-amd64 ./cmd/bridge-server
+
+# macOS (Intel)
+GOOS=darwin GOARCH=amd64 go build -o bin/bridge-server-darwin-amd64 ./cmd/bridge-server
+
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o bin/bridge-server-darwin-arm64 ./cmd/bridge-server
+
+# Windows (amd64)
+GOOS=windows GOARCH=amd64 go build -o bin/bridge-server-windows-amd64.exe ./cmd/bridge-server
 ```
 
 ## Run
