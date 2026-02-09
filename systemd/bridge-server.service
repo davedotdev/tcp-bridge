@@ -1,0 +1,31 @@
+[Unit]
+Description=TCP Bridge Server
+After=network.target
+
+[Service]
+Type=simple
+User=bridge
+Group=bridge
+EnvironmentFile=/etc/bridge-server.env
+ExecStart=/usr/local/bin/bridge-server
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
+# Allow binding to privileged ports
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
