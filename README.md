@@ -37,11 +37,13 @@ The system uses NATS JetStream KV for secure token-based connection pairing, ens
 
 ### 1. Configure NATS
 
-Create a KV bucket for session tokens:
+Create a KV bucket for session tokens with per-key TTL support:
 
 ```bash
-nats kv add bridge-sessions
+nats kv add bridge-sessions --allow-individual-ttl
 ```
+
+The `--allow-individual-ttl` flag is required because the bridge uses per-key TTLs (60 seconds) to auto-expire session tokens, preventing garbage accumulation.
 
 ### 2. Configure Environment
 

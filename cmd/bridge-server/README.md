@@ -25,7 +25,7 @@ Required variables:
 | `NATS_URL` | NATS server URL | `nats://nats.example.com:4222` |
 | `NATS_JWT` | NATS JWT credential | `eyJ0eXAi...` |
 | `NATS_SEED` | NATS seed credential | `SUAM...` |
-| `KV_BUCKET` | NATS KV bucket name | `bridge-sessions` |
+| `KV_BUCKET` | NATS KV bucket name (requires `--allow-individual-ttl`) | `bridge-sessions` |
 | `LISTEN_ADDR` | Address to bind | `0.0.0.0` |
 | `PUBLIC_PORT` | Port for public connections | `443` |
 | `DATA_PORT` | Port for client connections | `9443` |

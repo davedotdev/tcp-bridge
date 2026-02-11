@@ -26,7 +26,7 @@ Required variables:
 | `NATS_URL` | NATS server URL | `nats://nats.example.com:4222` |
 | `NATS_JWT` | NATS JWT credential | `eyJ0eXAi...` |
 | `NATS_SEED` | NATS seed credential | `SUAM...` |
-| `KV_BUCKET` | NATS KV bucket name | `bridge-sessions` |
+| `KV_BUCKET` | NATS KV bucket name (requires `--allow-individual-ttl`) | `bridge-sessions` |
 | `CLIENT_ID` | Client identifier | `my-laptop` |
 | `SERVER_HOST` | Bridge server hostname | `server.example.com` |
 | `DATA_PORT` | Server's data port | `9443` |
