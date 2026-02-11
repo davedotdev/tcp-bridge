@@ -43,10 +43,10 @@ func (c *Connector) Connect() {
 		return
 	}
 
-	log.Printf("relaying connection %s to %s", c.signal.ConnID, c.cfg.LocalTarget)
+	log.Printf("relaying connection to %s", c.cfg.LocalTarget)
 
 	// Relay traffic
 	relay.Relay(serverConn, localConn)
 
-	log.Printf("connection closed: %s", c.signal.ConnID)
+	log.Printf("connection closed to %s", c.cfg.LocalTarget)
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/davedotdev/tcp-bridge/internal/config"
 	bridgenats "github.com/davedotdev/tcp-bridge/internal/nats"
 	"github.com/davedotdev/tcp-bridge/internal/relay"
-	"github.com/google/uuid"
 )
 
 const (
@@ -35,7 +34,7 @@ type Server struct {
 
 type pendingConn struct {
 	conn     net.Conn
-	connID   string
+	token    string
 	created  time.Time
 	dataChan chan net.Conn
 }
@@ -120,8 +119,6 @@ func generateToken() (string, error) {
 
 // handlePublicConnection processes an incoming public connection.
 func (s *Server) handlePublicConnection(conn net.Conn) {
-	connID := uuid.New().String()
-
 	token, err := generateToken()
 	if err != nil {
 		log.Printf("failed to generate token: %v", err)
@@ -129,8 +126,8 @@ func (s *Server) handlePublicConnection(conn net.Conn) {
 		return
 	}
 
-	// Store token in NATS KV
-	if err := s.nats.StoreToken(token, connID); err != nil {
+	// Store token in NATS KV for one-time validation
+	if err := s.nats.StoreToken(token); err != nil {
 		log.Printf("failed to store token: %v", err)
 		conn.Close()
 		return
@@ -139,24 +136,23 @@ func (s *Server) handlePublicConnection(conn net.Conn) {
 	// Create pending connection entry
 	pc := &pendingConn{
 		conn:     conn,
-		connID:   connID,
+		token:    token,
 		created:  time.Now(),
 		dataChan: make(chan net.Conn, 1),
 	}
 
 	s.pendingMu.Lock()
-	s.pending[connID] = pc
+	s.pending[token] = pc
 	s.pendingMu.Unlock()
 
 	// Signal client
 	signal := bridgenats.ConnectSignal{
 		Token:     token,
-		ConnID:    connID,
 		Timestamp: time.Now().Unix(),
 	}
 	if err := s.nats.PublishConnect(s.cfg.ClientID, signal); err != nil {
 		log.Printf("failed to signal client: %v", err)
-		s.removePending(connID)
+		s.removePending(token)
 		conn.Close()
 		return
 	}
@@ -164,14 +160,13 @@ func (s *Server) handlePublicConnection(conn net.Conn) {
 	// Wait for data connection with timeout
 	select {
 	case dataConn := <-pc.dataChan:
-		log.Printf("connection paired: %s", connID)
 		relay.Relay(conn, dataConn)
 	case <-time.After(connectionTimeout):
-		log.Printf("connection timeout: %s", connID)
-		s.removePending(connID)
+		log.Printf("public connection timeout waiting for client")
+		s.removePending(token)
 		conn.Close()
 	case <-s.ctx.Done():
-		s.removePending(connID)
+		s.removePending(token)
 		conn.Close()
 	}
 }
@@ -192,17 +187,16 @@ func (s *Server) handleDataConnection(conn net.Conn) {
 	token := string(tokenBuf)
 
 	// Validate and delete token atomically
-	connID, valid := s.nats.ValidateAndDeleteToken(token)
-	if !valid {
+	if !s.nats.ValidateAndDeleteToken(token) {
 		conn.Close()
 		return
 	}
 
-	// Find pending connection
+	// Find pending connection by token
 	s.pendingMu.Lock()
-	pc, exists := s.pending[connID]
+	pc, exists := s.pending[token]
 	if exists {
-		delete(s.pending, connID)
+		delete(s.pending, token)
 	}
 	s.pendingMu.Unlock()
 
@@ -219,9 +213,16 @@ func (s *Server) handleDataConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) removePending(connID string) {
+func (s *Server) removePending(token string) {
 	s.pendingMu.Lock()
-	delete(s.pending, connID)
+	_, exists := s.pending[token]
+	if exists {
+		delete(s.pending, token)
+		// Clean up the token from NATS KV
+		if err := s.nats.DeleteToken(token); err != nil {
+			log.Printf("failed to delete token: %v", err)
+		}
+	}
 	s.pendingMu.Unlock()
 }
 
@@ -234,10 +235,13 @@ func (s *Server) cleanupStale() {
 		case <-ticker.C:
 			s.pendingMu.Lock()
 			now := time.Now()
-			for id, pc := range s.pending {
+			for token, pc := range s.pending {
 				if now.Sub(pc.created) > connectionTimeout {
-					delete(s.pending, id)
+					delete(s.pending, token)
 					pc.conn.Close()
+					if err := s.nats.DeleteToken(token); err != nil {
+						log.Printf("stale cleanup: failed to delete token: %v", err)
+					}
 				}
 			}
 			s.pendingMu.Unlock()

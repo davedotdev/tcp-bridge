@@ -2,10 +2,7 @@ module github.com/davedotdev/tcp-bridge
 
 go 1.25.5
 
-require (
-	github.com/google/uuid v1.6.0
-	github.com/nats-io/nats.go v1.48.0
-)
+require github.com/nats-io/nats.go v1.48.0
 
 require (
 	github.com/klauspost/compress v1.18.0 // indirect

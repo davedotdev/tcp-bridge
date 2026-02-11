@@ -25,7 +25,6 @@ type Client struct {
 // ConnectSignal is sent when a new connection needs to be bridged.
 type ConnectSignal struct {
 	Token     string `json:"token"`
-	ConnID    string `json:"conn_id"`
 	Timestamp int64  `json:"timestamp"`
 }
 
@@ -42,11 +41,6 @@ type RegisterResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
-// SessionData stored in KV for each pending connection.
-type SessionData struct {
-	ConnID  string `json:"conn_id"`
-	Created int64  `json:"created"`
-}
 
 // Connect establishes a connection to NATS with JWT/NKey authentication.
 func Connect(ctx context.Context, url, jwt, seed, kvBucket string) (*Client, error) {
@@ -87,39 +81,37 @@ func (c *Client) Close() {
 	c.nc.Close()
 }
 
-// StoreToken stores a session token in the KV store.
-func (c *Client) StoreToken(token, connID string) error {
-	data := SessionData{
-		ConnID:  connID,
-		Created: time.Now().Unix(),
-	}
-	b, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	_, err = c.kv.Put(c.ctx, token, b)
+// tokenTTL is how long tokens live in KV before auto-expiring.
+// Should be longer than connectionTimeout to avoid premature expiry.
+const tokenTTL = 60 * time.Second
+
+// StoreToken stores a session token in the KV store for one-time validation.
+// Tokens auto-expire after tokenTTL to prevent garbage accumulation.
+func (c *Client) StoreToken(token string) error {
+	_, err := c.kv.Create(c.ctx, token, []byte("1"), jetstream.KeyTTL(tokenTTL))
 	return err
 }
 
 // ValidateAndDeleteToken checks if a token exists and deletes it atomically.
-// Returns the connection ID if valid, empty string if not.
-func (c *Client) ValidateAndDeleteToken(token string) (string, bool) {
-	entry, err := c.kv.Get(c.ctx, token)
+// Returns true if the token was valid and has been consumed.
+func (c *Client) ValidateAndDeleteToken(token string) bool {
+	_, err := c.kv.Get(c.ctx, token)
 	if err != nil {
-		return "", false
+		return false
 	}
 
 	// Delete immediately to prevent reuse
 	if err := c.kv.Delete(c.ctx, token); err != nil {
-		return "", false
+		return false
 	}
 
-	var data SessionData
-	if err := json.Unmarshal(entry.Value(), &data); err != nil {
-		return "", false
-	}
+	return true
+}
 
-	return data.ConnID, true
+// DeleteToken removes a token from the KV store.
+// Used for cleanup when connections timeout or fail.
+func (c *Client) DeleteToken(token string) error {
+	return c.kv.Delete(c.ctx, token)
 }
 
 // PublishConnect sends a connection signal to the specified client.
