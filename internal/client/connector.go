@@ -1,9 +1,9 @@
 package client
 
 import (
-	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/davedotdev/tcp-bridge/internal/config"
@@ -20,7 +20,7 @@ type Connector struct {
 // Connect establishes the data connection and relays traffic.
 func (c *Connector) Connect() {
 	// Connect to server data port
-	serverAddr := fmt.Sprintf("%s:%d", c.cfg.ServerHost, c.cfg.DataPort)
+	serverAddr := net.JoinHostPort(c.cfg.ServerHost, strconv.Itoa(c.cfg.DataPort))
 	serverConn, err := net.DialTimeout("tcp", serverAddr, 10*time.Second)
 	if err != nil {
 		log.Printf("failed to connect to server data port: %v", err)

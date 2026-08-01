@@ -107,7 +107,7 @@ On the machine behind NAT:
 | `LISTEN_ADDR` | Address to bind listeners (default: 0.0.0.0) |
 | `PUBLIC_PORT` | Port for public connections |
 | `DATA_PORT` | Port for client data connections |
-| `CLIENT_ID` | Expected client identifier |
+| `CLIENT_IDS` | Comma-separated list of allowed client identifiers (`CLIENT_ID` also accepted for backward compatibility) |
 
 ### Client Configuration
 
@@ -117,10 +117,19 @@ On the machine behind NAT:
 | `NATS_JWT` | NATS JWT credential |
 | `NATS_SEED` | NATS seed credential |
 | `KV_BUCKET` | NATS KV bucket name for tokens |
-| `CLIENT_ID` | Client identifier (must match server's CLIENT_ID) |
+| `CLIENT_ID` | Client identifier (must be in the server's CLIENT_IDS list) |
 | `SERVER_HOST` | Server hostname |
 | `DATA_PORT` | Server's data port |
 | `LOCAL_TARGET` | Local service to forward to (e.g., localhost:443) |
+
+## Multiple Clients
+
+The server accepts registrations from any client listed in `CLIENT_IDS`, but only **one client holds the bridge at a time**:
+
+- The first allowlisted client to register becomes the active client, and all public connections are forwarded to it.
+- If a second client tries to register while another is active, it is rejected with status `busy`; the registration response includes `connected_client_id` and `connected_since` so you know which client to disconnect.
+- Clients send a heartbeat every 10 seconds. If the active client stops heartbeating for 30 seconds (e.g. it crashed), its slot is released and another client may connect.
+- On graceful shutdown a client deregisters explicitly, releasing the bridge immediately.
 
 ## Systemd Integration
 

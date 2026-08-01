@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 	bridgenats "github.com/davedotdev/tcp-bridge/internal/nats"
 	"github.com/nats-io/nats.go"
 )
+
+// heartbeatInterval is how often the client announces liveness to the
+// server. Must be well under the server's client expiry window.
+const heartbeatInterval = 10 * time.Second
 
 // Client is the bridge client that connects to the server
 // and forwards connections to local services.
@@ -54,6 +59,10 @@ func (c *Client) Run() error {
 	}
 	defer sub.Unsubscribe()
 
+	// Keep the server's liveness tracking fresh so a crashed client
+	// doesn't hold the bridge forever.
+	go c.heartbeatLoop()
+
 	log.Printf("client started: id=%s target=%s", c.cfg.ClientID, c.cfg.LocalTarget)
 
 	// Keep alive and handle reconnection
@@ -63,8 +72,29 @@ func (c *Client) Run() error {
 
 // Stop gracefully shuts down the client.
 func (c *Client) Stop() {
+	// Tell the server we're going away so another client can connect
+	// immediately rather than waiting for heartbeat expiry.
+	if err := c.nats.PublishDeregister(c.cfg.ClientID); err != nil {
+		log.Printf("failed to deregister: %v", err)
+	}
 	c.cancel()
 	c.nats.Close()
+}
+
+func (c *Client) heartbeatLoop() {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.nats.PublishHeartbeat(c.cfg.ClientID); err != nil {
+				log.Printf("failed to send heartbeat: %v", err)
+			}
+		case <-c.ctx.Done():
+			return
+		}
+	}
 }
 
 func (c *Client) registerWithRetry() error {
@@ -83,8 +113,13 @@ func (c *Client) registerWithRetry() error {
 			return nil
 		}
 
-		log.Printf("registration rejected: %s", resp.Error)
-		return &RegistrationError{Message: resp.Error}
+		msg := resp.Error
+		if resp.ConnectedClientID != "" {
+			msg = fmt.Sprintf("server is in use by client %q since %s; disconnect it before retrying",
+				resp.ConnectedClientID, time.Unix(resp.ConnectedSince, 0).Format(time.RFC3339))
+		}
+		log.Printf("registration rejected: %s", msg)
+		return &RegistrationError{Message: msg}
 	}
 
 	return lastErr

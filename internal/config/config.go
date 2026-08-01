@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // ServerConfig holds configuration for the bridge server.
@@ -15,7 +16,7 @@ type ServerConfig struct {
 	ListenAddr string
 	PublicPort int
 	DataPort   int
-	ClientID   string
+	ClientIDs  []string
 }
 
 // ClientConfig holds configuration for the bridge client.
@@ -37,7 +38,7 @@ func LoadServerConfig() (*ServerConfig, error) {
 		NATSJWT:    getEnv("NATS_JWT", ""),
 		NATSSeed:   getEnv("NATS_SEED", ""),
 		KVBucket:   getEnv("KV_BUCKET", "bridge-sessions"),
-		ClientID:   getEnv("CLIENT_ID", ""),
+		ClientIDs:  splitList(getEnv("CLIENT_IDS", getEnv("CLIENT_ID", ""))),
 		ListenAddr: getEnv("LISTEN_ADDR", "0.0.0.0"),
 		PublicPort: getEnvInt("PUBLIC_PORT", 443),
 		DataPort:   getEnvInt("DATA_PORT", 9443),
@@ -81,10 +82,20 @@ func (c *ServerConfig) Validate() error {
 	if c.NATSSeed == "" {
 		return fmt.Errorf("NATS_SEED is required")
 	}
-	if c.ClientID == "" {
-		return fmt.Errorf("CLIENT_ID is required")
+	if len(c.ClientIDs) == 0 {
+		return fmt.Errorf("CLIENT_IDS is required")
 	}
 	return nil
+}
+
+// AllowsClient reports whether the given client ID is in the allowlist.
+func (c *ServerConfig) AllowsClient(id string) bool {
+	for _, allowed := range c.ClientIDs {
+		if allowed == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Validate checks that required client configuration fields are set.
@@ -105,6 +116,18 @@ func (c *ClientConfig) Validate() error {
 		return fmt.Errorf("SERVER_HOST is required")
 	}
 	return nil
+}
+
+// splitList parses a comma-separated list, trimming whitespace and
+// dropping empty entries.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func getEnv(key, defaultValue string) string {

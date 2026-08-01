@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	registerSubject = "bridge.register"
+	registerSubject   = "bridge.register"
+	heartbeatSubject  = "bridge.heartbeat"
+	deregisterSubject = "bridge.deregister"
 )
 
 // Client wraps NATS connection with bridge-specific functionality.
@@ -35,10 +37,22 @@ type RegisterRequest struct {
 }
 
 // RegisterResponse is sent by the server in response to registration.
+// When registration is rejected because another client holds the bridge,
+// ConnectedClientID and ConnectedSince identify the current holder so the
+// operator knows what to disconnect.
 type RegisterResponse struct {
-	Status   string `json:"status"`
-	DataPort int    `json:"server_data_port"`
-	Error    string `json:"error,omitempty"`
+	Status            string `json:"status"`
+	DataPort          int    `json:"server_data_port"`
+	Error             string `json:"error,omitempty"`
+	ConnectedClientID string `json:"connected_client_id,omitempty"`
+	ConnectedSince    int64  `json:"connected_since,omitempty"`
+}
+
+// PresenceMsg is sent by clients to signal liveness (heartbeat) or an
+// explicit disconnect (deregister).
+type PresenceMsg struct {
+	ClientID  string `json:"client_id"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 
@@ -176,6 +190,51 @@ func (c *Client) Register(clientID string) (*RegisterResponse, error) {
 	}
 
 	return &resp, nil
+}
+
+// PublishHeartbeat announces that this client is alive.
+func (c *Client) PublishHeartbeat(clientID string) error {
+	return c.publishPresence(heartbeatSubject, clientID)
+}
+
+// PublishDeregister announces that this client is disconnecting.
+func (c *Client) PublishDeregister(clientID string) error {
+	if err := c.publishPresence(deregisterSubject, clientID); err != nil {
+		return err
+	}
+	// Flush so the message is delivered before the connection closes.
+	return c.nc.Flush()
+}
+
+func (c *Client) publishPresence(subject, clientID string) error {
+	b, err := json.Marshal(PresenceMsg{
+		ClientID:  clientID,
+		Timestamp: time.Now().Unix(),
+	})
+	if err != nil {
+		return err
+	}
+	return c.nc.Publish(subject, b)
+}
+
+// SubscribeHeartbeat subscribes to client heartbeat messages.
+func (c *Client) SubscribeHeartbeat(handler func(PresenceMsg)) (*nats.Subscription, error) {
+	return c.subscribePresence(heartbeatSubject, handler)
+}
+
+// SubscribeDeregister subscribes to client deregister messages.
+func (c *Client) SubscribeDeregister(handler func(PresenceMsg)) (*nats.Subscription, error) {
+	return c.subscribePresence(deregisterSubject, handler)
+}
+
+func (c *Client) subscribePresence(subject string, handler func(PresenceMsg)) (*nats.Subscription, error) {
+	return c.nc.Subscribe(subject, func(msg *nats.Msg) {
+		var pm PresenceMsg
+		if err := json.Unmarshal(msg.Data, &pm); err != nil {
+			return
+		}
+		handler(pm)
+	})
 }
 
 // Conn returns the underlying NATS connection.

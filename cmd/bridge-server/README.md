@@ -29,7 +29,9 @@ Required variables:
 | `LISTEN_ADDR` | Address to bind | `0.0.0.0` |
 | `PUBLIC_PORT` | Port for public connections | `443` |
 | `DATA_PORT` | Port for client connections | `9443` |
-| `CLIENT_ID` | Expected client identifier | `my-laptop` |
+| `CLIENT_IDS` | Comma-separated allowed client identifiers (`CLIENT_ID` also accepted) | `my-laptop,my-desktop` |
+
+Any client in `CLIENT_IDS` may connect, but only one holds the bridge at a time. A second client registering while another is active is rejected with a `busy` response that reports the currently connected client ID and connection time. The active slot is released when the client deregisters (graceful shutdown) or misses heartbeats for 30 seconds.
 
 ## Build
 

@@ -27,7 +27,7 @@ Required variables:
 | `NATS_JWT` | NATS JWT credential | `eyJ0eXAi...` |
 | `NATS_SEED` | NATS seed credential | `SUAM...` |
 | `KV_BUCKET` | NATS KV bucket name (requires `--allow-individual-ttl`) | `bridge-sessions` |
-| `CLIENT_ID` | Client identifier | `my-laptop` |
+| `CLIENT_ID` | Client identifier (must be in the server's `CLIENT_IDS` list) | `my-laptop` |
 | `SERVER_HOST` | Bridge server hostname | `server.example.com` |
 | `DATA_PORT` | Server's data port | `9443` |
 | `LOCAL_TARGET` | Local service address | `localhost:443` |
@@ -61,7 +61,15 @@ The client will:
 - Load configuration from `configs/bridge-client.env`
 - Connect to NATS and register with the server
 - Wait for connection signals and handle them automatically
+- Send a heartbeat every 10 seconds so the server knows it is alive
 - Automatically re-register if the NATS connection is lost and restored
+- Deregister on graceful shutdown so another client can take over immediately
+
+Only one client can hold the bridge at a time. If another client is already connected, registration fails with a message identifying the connected client and when it connected, e.g.:
+
+```
+registration rejected: server is in use by client "my-desktop" since 2026-08-01T09:15:00Z; disconnect it before retrying
+```
 
 ## Systemd Service
 
